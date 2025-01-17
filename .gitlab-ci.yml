@@ -1,0 +1,54 @@
+stages:
+  - lint
+  - build
+  - scan
+  - push
+
+variables:
+  DOCKER_IMAGE: my-django-app
+  DOCKER_REGISTRY: registry.example.com  # Remplacez par votre registry (Docker Hub, Nexus, Harbor, etc.)
+  DOCKER_TAG: latest
+
+# Linting du code Python
+lint-python:
+  stage: lint
+  image: python:3.9-slim
+  script:
+    - pip install flake8
+    - flake8 .
+
+# Linting du Dockerfile
+lint-dockerfile:
+  stage: lint
+  image: hadolint/hadolint
+  script:
+    - hadolint Dockerfile
+
+# Build de l'image Docker
+build-image:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t $DOCKER_IMAGE:$DOCKER_TAG .
+
+# Scan de l'image Docker avec Trivy
+scan-image:
+  stage: scan
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL $DOCKER_IMAGE:$DOCKER_TAG
+
+# Push de l'image Docker vers un registry
+push-image:
+  stage: push
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - echo "$DOCKER_REGISTRY_PASSWORD" | docker login -u "$DOCKER_REGISTRY_USERNAME" --password-stdin $DOCKER_REGISTRY
+    - docker tag $DOCKER_IMAGE:$DOCKER_TAG $DOCKER_REGISTRY/$DOCKER_IMAGE:$DOCKER_TAG
+    - docker push $DOCKER_REGISTRY/$DOCKER_IMAGE:$DOCKER_TAG
+  only:
+    - main  # Exécuter cette étape uniquement sur la branche principale
